@@ -1,0 +1,29 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5434/appdb
+    username: app
+    password: app
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+tripmate:
+  keycloak:
+    base-url: http://localhost:8080
+    realm: tripmate
+    client-id: tripmate-backend
+    client-secret: 42JkBeUD9ywwYUXnETqKrgbw8S8SiEWe
+    admin-username: admin
+    admin-password: admin
+
+spring.security.oauth2.resourceserver.jwt:
+  issuer-uri: ${tripmate.keycloak.base-url}/realms/${tripmate.keycloak.realm}
