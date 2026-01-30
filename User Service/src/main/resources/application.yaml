@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8082
 
 spring:
   datasource:
@@ -15,15 +15,24 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  application:
+    name: user-service
 
 tripmate:
   keycloak:
     base-url: http://localhost:8080
     realm: tripmate
     client-id: tripmate-backend
-    client-secret: 42JkBeUD9ywwYUXnETqKrgbw8S8SiEWe
+    client-secret: ${KEYCLOAK_CLIENT_SECRET}
     admin-username: admin
     admin-password: admin
 
 spring.security.oauth2.resourceserver.jwt:
   issuer-uri: ${tripmate.keycloak.base-url}/realms/${tripmate.keycloak.realm}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+    fetch-registry: true
+    register-with-eureka: true

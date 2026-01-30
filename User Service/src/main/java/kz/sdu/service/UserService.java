@@ -1,58 +1,41 @@
 package kz.sdu.service;
 
+import kz.sdu.clients.notification.*;
 import kz.sdu.dto.*;
-import kz.sdu.entity.EmailVerificationCode;
-import kz.sdu.entity.PasswordResetToken;
 import kz.sdu.entity.UserProfile;
 import kz.sdu.keycloak.KeycloakAdminFactory;
 import kz.sdu.keycloak.OidcTokenClient;
-import kz.sdu.repository.EmailVerificationCodeRepository;
-import kz.sdu.repository.PasswordResetTokenRepository;
 import kz.sdu.repository.UserProfileRepository;
+import lombok.AllArgsConstructor;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
+@AllArgsConstructor
 public class UserService {
 
     private static final SecureRandom RNG = new SecureRandom();
 
     private final OidcTokenClient oidcTokenClient;
     private final KeycloakAdminFactory keycloakAdminFactory;
-    private final EmailVerificationCodeRepository emailVerificationCodeRepository;
-    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final UserProfileRepository userProfileRepository;
-    private final EmailService emailService;
+    private final NotificationClient notificationClient;
 
-    public UserService(
-            OidcTokenClient oidcTokenClient,
-            KeycloakAdminFactory keycloakAdminFactory,
-            EmailVerificationCodeRepository emailVerificationCodeRepository,
-            PasswordResetTokenRepository passwordResetTokenRepository,
-            UserProfileRepository userProfileRepository,
-            EmailService emailService
-    ) {
-        this.oidcTokenClient = oidcTokenClient;
-        this.keycloakAdminFactory = keycloakAdminFactory;
-        this.emailVerificationCodeRepository = emailVerificationCodeRepository;
-        this.passwordResetTokenRepository = passwordResetTokenRepository;
-        this.userProfileRepository = userProfileRepository;
-        this.emailService = emailService;
-    }
 
-    public UserLoginResponseDto login(UserLoginRequestDto req) {
+    public ResponseEntity<UserLoginResponseDto> login(UserLoginRequestDto req) {
         try {
             Map<String, Object> tokens = oidcTokenClient.passwordGrant(req.getEmail(), req.getPassword());
             String accessToken = (String) tokens.get("access_token");
@@ -62,7 +45,7 @@ public class UserService {
             ensureUserProfileIfMissing(user);
 
             UserProfile profile = userProfileRepository.findByEmail(req.getEmail()).orElse(null);
-            return UserLoginResponseDto.builder()
+            UserLoginResponseDto loginResponseDto = UserLoginResponseDto.builder()
                     .success(true)
                     .data(UserLoginResponseDataDto.builder()
                             .user(toAuthUser(user, profile, false))
@@ -70,14 +53,17 @@ public class UserService {
                             .refreshToken(refreshToken)
                             .build())
                     .build();
+            return new ResponseEntity<>(loginResponseDto, HttpStatus.OK);
         } catch (HttpClientErrorException e) {
-            return UserLoginResponseDto.builder()
+            UserLoginResponseDto loginResponseDto = UserLoginResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
                             .code("INVALID_CREDENTIALS")
                             .message("Invalid email or password")
                             .build())
                     .build();
+
+            return new ResponseEntity<>(loginResponseDto,HttpStatus.UNAUTHORIZED);
         }
     }
 
@@ -98,13 +84,12 @@ public class UserService {
         ensureUserProfileById(userId, req);
 
         String code = generateCode6();
-        emailVerificationCodeRepository.save(EmailVerificationCode.builder()
+
+        notificationClient.createVerificationCode(CreateVerificationCodePayload.builder()
                 .email(req.getEmail())
                 .code(code)
                 .rawPassword(req.getPassword())
-                .expiresAt(LocalDateTime.now().plusMinutes(15))
                 .build());
-        emailService.sendVerificationCode(req.getEmail(), code);
 
         return RegisterResponseDto.builder()
                 .success(true)
@@ -119,9 +104,12 @@ public class UserService {
 
     @Transactional
     public VerifyEmailResponseDto verifyEmail(VerifyEmailRequestDto req) {
-        EmailVerificationCode code = emailVerificationCodeRepository.findById(req.getEmail())
-                .orElse(null);
-        if (code == null || code.getExpiresAt().isBefore(LocalDateTime.now()) || !code.getCode().equals(req.getCode())) {
+        VerifyCodeResponse codeResponse = notificationClient.verifyCode(VerifyCodePayload.builder()
+                .email(req.getEmail())
+                .code(req.getCode())
+                .build());
+
+        if (!codeResponse.valid()) {
             return VerifyEmailResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
@@ -133,9 +121,9 @@ public class UserService {
 
         UserRepresentation user = findKeycloakUserByEmail(req.getEmail());
         enableAndVerifyEmail(user.getId());
-        emailVerificationCodeRepository.deleteById(req.getEmail());
+        notificationClient.deleteVerificationCode(req.getEmail());
 
-        Map<String, Object> tokens = oidcTokenClient.passwordGrant(req.getEmail(), code.getRawPassword());
+        Map<String, Object> tokens = oidcTokenClient.passwordGrant(req.getEmail(), codeResponse.rawPassword());
         return VerifyEmailResponseDto.builder()
                 .success(true)
                 .data(VerifyEmailResponseDataDto.builder()
@@ -148,8 +136,7 @@ public class UserService {
 
     @Transactional
     public SimpleMessageResponseDto resendVerification(ResendVerificationRequestDto req) {
-        EmailVerificationCode existing = emailVerificationCodeRepository.findById(req.getEmail()).orElse(null);
-        if (existing == null) {
+        if (!notificationClient.verificationCodeExists(req.getEmail())) {
             return SimpleMessageResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
@@ -160,10 +147,10 @@ public class UserService {
         }
 
         String newCode = generateCode6();
-        existing.setCode(newCode);
-        existing.setExpiresAt(LocalDateTime.now().plusMinutes(15));
-        emailVerificationCodeRepository.save(existing);
-        emailService.sendVerificationCode(req.getEmail(), newCode);
+        notificationClient.updateVerificationCode(UpdateVerificationCodePayload.builder()
+                .email(req.getEmail())
+                .code(newCode)
+                .build());
 
         return SimpleMessageResponseDto.builder()
                 .success(true)
@@ -176,13 +163,11 @@ public class UserService {
         // Always 200 per your contract
         UserRepresentation user = findKeycloakUserByEmailOrNull(req.getEmail());
         if (user != null) {
-            UUID token = UUID.randomUUID();
-            passwordResetTokenRepository.save(PasswordResetToken.builder()
-                    .token(token)
-                    .email(req.getEmail())
-                    .expiresAt(LocalDateTime.now().plusMinutes(30))
-                    .build());
-            emailService.sendPasswordResetLink(req.getEmail(), token.toString());
+            CreatePasswordResetTokenResponse response = notificationClient.createPasswordResetToken(
+                    CreatePasswordResetTokenPayload.builder()
+                            .email(req.getEmail())
+                            .build());
+            // Token is already sent via email by notification service
         }
 
         return SimpleMessageResponseDto.builder()
@@ -206,8 +191,12 @@ public class UserService {
                     .build();
         }
 
-        PasswordResetToken prt = passwordResetTokenRepository.findByToken(token).orElse(null);
-        if (prt == null || prt.getExpiresAt().isBefore(LocalDateTime.now())) {
+        VerifyPasswordResetTokenResponse tokenResponse = notificationClient.verifyPasswordResetToken(
+                VerifyPasswordResetTokenPayload.builder()
+                        .token(token)
+                        .build());
+
+        if (!tokenResponse.valid()) {
             return SimpleMessageResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
@@ -217,9 +206,9 @@ public class UserService {
                     .build();
         }
 
-        UserRepresentation user = findKeycloakUserByEmail(prt.getEmail());
+        UserRepresentation user = findKeycloakUserByEmail(tokenResponse.email());
         setPassword(user.getId(), req.getNewPassword());
-        passwordResetTokenRepository.deleteById(token);
+        notificationClient.deletePasswordResetToken(token);
 
         return SimpleMessageResponseDto.builder()
                 .success(true)
