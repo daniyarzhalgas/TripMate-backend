@@ -8,7 +8,7 @@ public class GoogleAuthRequestDto {
     @NotBlank
     private String idToken;
 
-    @NotBlank
-    private String accessToken;
+//    @NotBlank
+//    private String accessToken;
 }
 

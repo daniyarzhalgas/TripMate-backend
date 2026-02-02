@@ -28,6 +28,7 @@ tripmate:
     admin-password: admin
 
 spring.security.oauth2.resourceserver.jwt:
+
   issuer-uri: ${tripmate.keycloak.base-url}/realms/${tripmate.keycloak.realm}
 
 eureka:
@@ -36,3 +37,14 @@ eureka:
       defaultZone: http://localhost:8761/eureka
     fetch-registry: true
     register-with-eureka: true
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    csrf:
+      enabled: false
+
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID}

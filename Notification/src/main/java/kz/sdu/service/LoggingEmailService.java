@@ -41,6 +41,7 @@ public class LoggingEmailService implements EmailService {
     @Override
     public void sendPasswordResetLink(String email, String token) {
         log.info("Password reset token for {}: {}", email, token);
+
     }
 
 

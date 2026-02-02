@@ -7,6 +7,7 @@ import kz.sdu.keycloak.KeycloakAdminFactory;
 import kz.sdu.keycloak.OidcTokenClient;
 import kz.sdu.repository.UserProfileRepository;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class UserService {
@@ -33,6 +35,7 @@ public class UserService {
     private final KeycloakAdminFactory keycloakAdminFactory;
     private final UserProfileRepository userProfileRepository;
     private final NotificationClient notificationClient;
+    private final GoogleTokenVerifier googleTokenVerifier;
 
 
     public ResponseEntity<UserLoginResponseDto> login(UserLoginRequestDto req) {
@@ -63,7 +66,7 @@ public class UserService {
                             .build())
                     .build();
 
-            return new ResponseEntity<>(loginResponseDto,HttpStatus.UNAUTHORIZED);
+            return new ResponseEntity<>(loginResponseDto, HttpStatus.UNAUTHORIZED);
         }
     }
 
@@ -250,30 +253,86 @@ public class UserService {
 
     public UserLoginResponseDto google(GoogleAuthRequestDto req) {
         try {
-            Map<String, Object> tokens = oidcTokenClient.tokenExchangeGoogle(req.getIdToken());
+            GoogleUserPayload googleUser =
+                    googleTokenVerifier.verifyGoogleToken(req.getIdToken());
+
+            Map<String, Object> tokens;
+            try {
+                tokens = oidcTokenClient.tokenExchangeGoogle(req.getIdToken());
+            } catch (HttpClientErrorException e) {
+                // Keycloak token exchange not configured — fallback: find or create user, then password grant
+                UserRepresentation user = findKeycloakUserByEmailOrNull(googleUser.getEmail());
+                if (user == null) {
+                    String tempPassword = createKeycloakUserFromGoogle(googleUser);
+                    tokens = oidcTokenClient.passwordGrant(googleUser.getEmail(), tempPassword);
+                    user = findKeycloakUserByEmail(googleUser.getEmail());
+                } else {
+                    throw new RuntimeException("User exists but Keycloak token exchange is not configured");
+                }
+                ensureUserProfileIfMissing(user);
+                UserProfile profile = userProfileRepository.findByEmail(googleUser.getEmail()).orElse(null);
+                return UserLoginResponseDto.builder()
+                        .success(true)
+                        .data(UserLoginResponseDataDto.builder()
+                                .user(toAuthUser(user, profile, true))
+                                .accessToken((String) tokens.get("access_token"))
+                                .refreshToken((String) tokens.get("refresh_token"))
+                                .build())
+                        .build();
+            }
+
+            UserRepresentation user = findKeycloakUserByEmail(googleUser.getEmail());
+            ensureUserProfileIfMissing(user);
+            UserProfile profile = userProfileRepository.findByEmail(googleUser.getEmail()).orElse(null);
+
             return UserLoginResponseDto.builder()
                     .success(true)
                     .data(UserLoginResponseDataDto.builder()
-                            .user(AuthUserDto.builder()
-                                    .id(null)
-                                    .email(null)
-                                    .name(null)
-                                    .isNewUser(false)
-                                    .profileComplete(false)
-                                    .build())
+                            .user(toAuthUser(user, profile, false))
                             .accessToken((String) tokens.get("access_token"))
                             .refreshToken((String) tokens.get("refresh_token"))
                             .build())
                     .build();
         } catch (Exception e) {
+            log.warn("Google auth failed", e);
             return UserLoginResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
                             .code("GOOGLE_AUTH_FAILED")
-                            .message("Google authentication failed")
+                            .message(e.getMessage() != null ? e.getMessage() : "Google authentication failed")
                             .build())
                     .build();
         }
+    }
+
+    /**
+     * Creates a Keycloak user from Google payload with a random password.
+     * Returns the generated password for immediate password grant.
+     */
+    private String createKeycloakUserFromGoogle(GoogleUserPayload googleUser) {
+        String tempPassword = UUID.randomUUID().toString().replace("-", "") + "A1!";
+        UserRepresentation u = new UserRepresentation();
+        u.setEmail(googleUser.getEmail());
+        u.setUsername(googleUser.getEmail());
+        u.setEnabled(true);
+        u.setEmailVerified(Boolean.TRUE.equals(googleUser.getEmailVerified()));
+        String name = googleUser.getName();
+        if (name != null && !name.isBlank()) {
+            int space = name.indexOf(' ');
+            if (space > 0) {
+                u.setFirstName(name.substring(0, space));
+                u.setLastName(name.substring(space + 1).trim());
+            } else {
+                u.setFirstName(name);
+            }
+        }
+        CredentialRepresentation cred = new CredentialRepresentation();
+        cred.setType(CredentialRepresentation.PASSWORD);
+        cred.setTemporary(false);
+        cred.setValue(tempPassword);
+        u.setCredentials(List.of(cred));
+        users().create(u);
+        return tempPassword;
     }
 
     private UsersResource users() {
