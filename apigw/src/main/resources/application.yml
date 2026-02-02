@@ -1,13 +1,23 @@
 server:
   port: 8083
 
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka
-    fetch-registry: true
-    register-with-eureka: true
+
+tripmate:
+  keycloak:
+    base-url: http://localhost:8080
+    realm: tripmate
+    client-id: tripmate-backend
+    client-secret: ${KEYCLOAK_CLIENT_SECRET}
+    admin-username: admin
+    admin-password: admin
+
 spring:
+  security:
+    oauth2:
+      resource-server:
+        jwt:
+          issuer-uri: ${tripmate.keycloak.base-url}/realms/${tripmate.keycloak.realm}
+
   application:
     name: api-gateway
   cloud:
@@ -23,3 +33,9 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/auth/**
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+    fetch-registry: true
+    register-with-eureka: true

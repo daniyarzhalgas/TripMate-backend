@@ -28,7 +28,6 @@ tripmate:
     admin-password: admin
 
 spring.security.oauth2.resourceserver.jwt:
-
   issuer-uri: ${tripmate.keycloak.base-url}/realms/${tripmate.keycloak.realm}
 
 eureka:
