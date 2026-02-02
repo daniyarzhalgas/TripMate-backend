@@ -6,9 +6,9 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255),
-    full_name VARCHAR(255) NOT NULL,
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255) NOT NULL,
     date_of_birth DATE NOT NULL,
-    age INTEGER GENERATED ALWAYS AS (EXTRACT(YEAR FROM age(date_of_birth))) STORED,
     gender VARCHAR(20) NOT NULL,
     phone VARCHAR(20) UNIQUE,
     bio TEXT,
@@ -26,7 +26,7 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT check_age CHECK (age >= 18 AND age <= 100),
-    CONSTRAINT check_gender CHECK (gender IN ('male', 'female', 'other', 'prefer_not_to_say')),
+    CONSTRAINT check_gender CHECK (gender IN ('male', 'female', 'prefer_not_to_say')),
     CONSTRAINT check_auth_provider CHECK (auth_provider IN ('local', 'google')),
     CONSTRAINT check_account_status CHECK (account_status IN ('active', 'suspended', 'deleted'))
 );
