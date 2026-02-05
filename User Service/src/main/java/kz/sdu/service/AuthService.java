@@ -1,7 +1,12 @@
 package kz.sdu.service;
 
-import kz.sdu.clients.notification.*;
+import kz.sdu.clients.notification.NotificationClient;
+import kz.sdu.clients.notification.NotificationEmailDto;
+import kz.sdu.clients.notification.PasswordResetLinkPayload;
+import kz.sdu.clients.notification.VerificationCodePayload;
 import kz.sdu.dto.*;
+import kz.sdu.entity.EmailVerificationCode;
+import kz.sdu.entity.PasswordResetToken;
 import kz.sdu.entity.UserProfile;
 import kz.sdu.keycloak.KeycloakAdminFactory;
 import kz.sdu.keycloak.OidcTokenClient;
@@ -20,6 +25,7 @@ import org.springframework.web.client.HttpClientErrorException;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +42,7 @@ public class AuthService {
     private final UserProfileRepository userProfileRepository;
     private final NotificationClient notificationClient;
     private final GoogleTokenVerifier googleTokenVerifier;
+    private final VerificationService verificationService;
 
 
     public ResponseEntity<UserLoginResponseDto> login(UserLoginRequestDto req) {
@@ -88,10 +95,11 @@ public class AuthService {
 
         String code = generateCode6();
 
-        notificationClient.createVerificationCode(CreateVerificationCodePayload.builder()
+        // Persist verification code and send it via notification service
+        verificationService.createVerificationCode(req.getEmail(), code, req.getPassword());
+        notificationClient.sendVerificationCode(VerificationCodePayload.builder()
                 .email(req.getEmail())
                 .code(code)
-                .rawPassword(req.getPassword())
                 .build());
 
         return RegisterResponseDto.builder()
@@ -107,12 +115,10 @@ public class AuthService {
 
     @Transactional
     public VerifyEmailResponseDto verifyEmail(VerifyEmailRequestDto req) {
-        VerifyCodeResponse codeResponse = notificationClient.verifyCode(VerifyCodePayload.builder()
-                .email(req.getEmail())
-                .code(req.getCode())
-                .build());
+        EmailVerificationCode code = verificationService.getVerificationCode(req.getEmail())
+                .orElse(null);
 
-        if (!codeResponse.valid()) {
+        if (code == null || code.getExpiresAt().isBefore(LocalDateTime.now()) || !code.getCode().equals(req.getCode())) {
             return VerifyEmailResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
@@ -124,9 +130,12 @@ public class AuthService {
 
         UserRepresentation user = findKeycloakUserByEmail(req.getEmail());
         enableAndVerifyEmail(user.getId());
-        notificationClient.deleteVerificationCode(req.getEmail());
+        verificationService.deleteVerificationCode(req.getEmail());
+        notificationClient.sendWelcomeMessage(NotificationEmailDto.builder()
+                .email(req.getEmail())
+                .build());
 
-        Map<String, Object> tokens = oidcTokenClient.passwordGrant(req.getEmail(), codeResponse.rawPassword());
+        Map<String, Object> tokens = oidcTokenClient.passwordGrant(req.getEmail(), code.getRawPassword());
         return VerifyEmailResponseDto.builder()
                 .success(true)
                 .data(VerifyEmailResponseDataDto.builder()
@@ -139,7 +148,7 @@ public class AuthService {
 
     @Transactional
     public SimpleMessageResponseDto resendVerification(ResendVerificationRequestDto req) {
-        if (!notificationClient.verificationCodeExists(req.getEmail())) {
+        if (!verificationService.verificationCodeExists(req.getEmail())) {
             return SimpleMessageResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
@@ -150,7 +159,8 @@ public class AuthService {
         }
 
         String newCode = generateCode6();
-        notificationClient.updateVerificationCode(UpdateVerificationCodePayload.builder()
+        verificationService.updateVerificationCode(req.getEmail(), newCode);
+        notificationClient.sendVerificationCode(VerificationCodePayload.builder()
                 .email(req.getEmail())
                 .code(newCode)
                 .build());
@@ -166,11 +176,13 @@ public class AuthService {
         // Always 200 per your contract
         UserRepresentation user = findKeycloakUserByEmailOrNull(req.getEmail());
         if (user != null) {
-            CreatePasswordResetTokenResponse response = notificationClient.createPasswordResetToken(
-                    CreatePasswordResetTokenPayload.builder()
-                            .email(req.getEmail())
-                            .build());
-            // Token is already sent via email by notification service
+            UUID token = verificationService.createPasswordResetToken(req.getEmail());
+
+            // Send reset link via notification service (notification does not manage tokens)
+            notificationClient.sendPasswordResetLink(PasswordResetLinkPayload.builder()
+                    .email(req.getEmail())
+                    .token(token.toString())
+                    .build());
         }
 
         return SimpleMessageResponseDto.builder()
@@ -194,12 +206,10 @@ public class AuthService {
                     .build();
         }
 
-        VerifyPasswordResetTokenResponse tokenResponse = notificationClient.verifyPasswordResetToken(
-                VerifyPasswordResetTokenPayload.builder()
-                        .token(token)
-                        .build());
+        PasswordResetToken tokenEntity = verificationService.getPasswordResetToken(token)
+                .orElse(null);
 
-        if (!tokenResponse.valid()) {
+        if (tokenEntity == null || tokenEntity.getExpiresAt().isBefore(LocalDateTime.now())) {
             return SimpleMessageResponseDto.builder()
                     .success(false)
                     .error(ApiErrorDto.builder()
@@ -209,9 +219,9 @@ public class AuthService {
                     .build();
         }
 
-        UserRepresentation user = findKeycloakUserByEmail(tokenResponse.email());
+        UserRepresentation user = findKeycloakUserByEmail(tokenEntity.getEmail());
         setPassword(user.getId(), req.getNewPassword());
-        notificationClient.deletePasswordResetToken(token);
+        verificationService.deletePasswordResetToken(token);
 
         return SimpleMessageResponseDto.builder()
                 .success(true)

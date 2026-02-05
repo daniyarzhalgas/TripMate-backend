@@ -2,6 +2,7 @@ package kz.sdu.service;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import kz.sdu.config.FrontendProperties;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,7 @@ public class LoggingEmailService implements EmailService {
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
-    private final Environment env;
+    private FrontendProperties frontendProperties;
 
     @Override
     public void sendVerificationCode(String email, String code) throws MessagingException {
@@ -39,8 +40,20 @@ public class LoggingEmailService implements EmailService {
     }
 
     @Override
-    public void sendPasswordResetLink(String email, String token) {
+    public void sendPasswordResetLink(String email, String token) throws MessagingException {
         log.info("Password reset token for {}: {}", email, token);
+        Context context = new Context();
+        context.setVariable(
+                "resetLink",
+                frontendProperties.getUrl() + "/reset-password?token=" + token
+        );
+        String body = templateEngine.process(
+                "mail/reset-password-email",
+                context
+        );
+        sendEmail(email,
+                "mail.reset-password.subject",
+                body);
 
     }
 

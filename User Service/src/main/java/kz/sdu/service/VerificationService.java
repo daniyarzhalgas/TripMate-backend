@@ -1,6 +1,5 @@
 package kz.sdu.service;
 
-import jakarta.mail.MessagingException;
 import kz.sdu.entity.EmailVerificationCode;
 import kz.sdu.entity.PasswordResetToken;
 import kz.sdu.repository.EmailVerificationCodeRepository;
@@ -10,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,23 +18,26 @@ public class VerificationService {
 
     private final EmailVerificationCodeRepository emailVerificationCodeRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
-    private final LoggingEmailService loggingEmailService;
 
+    /**
+     * Create and persist a new verification code for the given email.
+     * Email sending is handled by the notification service.
+     */
     @Transactional
     public void createVerificationCode(String email, String code, String rawPassword) {
         emailVerificationCodeRepository.save(EmailVerificationCode.builder()
                 .email(email)
                 .code(code)
                 .rawPassword(rawPassword)
-                .expiresAt(LocalDateTime.now().plusMinutes(15))
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
                 .build());
     }
 
-    public Optional<EmailVerificationCode> getVerificationCode(String email) throws MessagingException {
-        EmailVerificationCode code = emailVerificationCodeRepository.findById(email).orElseThrow(() -> new NoSuchElementException("email not exits"));
-
-        loggingEmailService.sendWelcomeMessage(email);
-        return Optional.of(code);
+    /**
+     * Get the stored verification code, if any.
+     */
+    public Optional<EmailVerificationCode> getVerificationCode(String email) {
+        return emailVerificationCodeRepository.findById(email);
     }
 
     public boolean verificationCodeExists(String email) {
@@ -48,12 +49,15 @@ public class VerificationService {
         emailVerificationCodeRepository.deleteById(email);
     }
 
+    /**
+     * Update code value and expiry for an existing verification code.
+     */
     @Transactional
     public void updateVerificationCode(String email, String newCode) {
         EmailVerificationCode existing = emailVerificationCodeRepository.findById(email)
                 .orElseThrow(() -> new RuntimeException("Verification code not found"));
         existing.setCode(newCode);
-        existing.setExpiresAt(LocalDateTime.now().plusMinutes(15));
+        existing.setExpiresAt(LocalDateTime.now().plusMinutes(10));
         emailVerificationCodeRepository.save(existing);
     }
 
