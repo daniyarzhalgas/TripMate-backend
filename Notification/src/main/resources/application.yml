@@ -22,6 +22,9 @@ spring:
           auth: true
           starttls:
             enable: true
+  messages:
+    basename: i18n/mail-subjects
+    encoding: UTF-8
 
 server:
   port: 8081

@@ -6,12 +6,15 @@ import kz.sdu.config.FrontendProperties;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSource;
 import org.springframework.core.env.Environment;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
+
+import java.util.Locale;
 
 @Service
 @AllArgsConstructor
@@ -21,6 +24,8 @@ public class LoggingEmailService implements EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private FrontendProperties frontendProperties;
+    private final MessageSource messageSource;
+
 
     @Override
     public void sendVerificationCode(String email, String code) throws MessagingException {
@@ -71,7 +76,13 @@ public class LoggingEmailService implements EmailService {
         );
     }
 
-    private void sendEmail(String to, String subject, String html) throws MessagingException {
+    private void sendEmail(String to, String header, String html) throws MessagingException {
+        String subject = messageSource.getMessage(
+                header,
+                null,
+                Locale.forLanguageTag("ru")
+        );
+
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 

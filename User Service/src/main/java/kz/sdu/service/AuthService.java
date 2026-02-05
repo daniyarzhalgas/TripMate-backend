@@ -45,7 +45,7 @@ public class AuthService {
     private final VerificationService verificationService;
 
 
-    public ResponseEntity<UserLoginResponseDto> login(UserLoginRequestDto req) {
+    public UserLoginResponseDto login(UserLoginRequestDto req) {
         try {
             Map<String, Object> tokens = oidcTokenClient.passwordGrant(req.getEmail(), req.getPassword());
             String accessToken = (String) tokens.get("access_token");
@@ -63,7 +63,7 @@ public class AuthService {
                             .refreshToken(refreshToken)
                             .build())
                     .build();
-            return new ResponseEntity<>(loginResponseDto, HttpStatus.OK);
+            return loginResponseDto;
         } catch (HttpClientErrorException e) {
             UserLoginResponseDto loginResponseDto = UserLoginResponseDto.builder()
                     .success(false)
@@ -73,7 +73,7 @@ public class AuthService {
                             .build())
                     .build();
 
-            return new ResponseEntity<>(loginResponseDto, HttpStatus.UNAUTHORIZED);
+            return loginResponseDto;
         }
     }
 
