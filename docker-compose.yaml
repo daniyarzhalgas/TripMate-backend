@@ -1,5 +1,9 @@
 version: "3.9"
 
+networks:
+  tripmate-network:
+    driver: bridge
+
 services:
 
   postgres-keycloak:
@@ -14,11 +18,15 @@ services:
       - keycloak_db:/var/lib/postgresql/data
     ports:
       - "5433:5432"
+    networks:
+      - tripmate-network
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.3
     container_name: keycloak
-    command: start-dev
+    command:
+      - start-dev
+      - --import-realm
     depends_on:
       - postgres-keycloak
     environment:
@@ -31,8 +39,12 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
 
       KC_HTTP_PORT: 8080
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
     ports:
       - "8080:8080"
+    networks:
+      - tripmate-network
 
   postgres-app:
     image: postgres:16
@@ -46,6 +58,68 @@ services:
       - app_db:/var/lib/postgresql/data
     ports:
       - "5434:5432"
+    networks:
+      - tripmate-network
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - tripmate-network
+
+  apigw:
+    build: ./apigw
+    container_name: apigw
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/tripmate
+      KEYCLOAK_CLIENT_SECRET: user-service-secret
+    ports:
+      - "8083:8083"
+    networks:
+      - tripmate-network
+    depends_on:
+      - keycloak
+      - eureka-server
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-app:5432/appdb
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: app
+      GOOGLE_CLIENT_ID: 763666130045-0f93cgjran1egi6or2iepgi95poc013s.apps.googleusercontent.com
+      KEYCLOAK_REALM: tripmate
+      KEYCLOAK_CLIENT_ID: user-service
+      KEYCLOAK_CLIENT_SECRET: user-service-secret
+      KEYCLOAK_URL: http://keycloak:8080
+    ports:
+      - "8082:8082"
+    networks:
+      - tripmate-network
+    depends_on:
+      - postgres-app
+      - keycloak
+      - eureka-server
+  notification:
+    build: ./notification
+    container_name: notification
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MAIL_PASSWORD: nfxtowfvetpogksi
+      MAIL_USERNAME: zhlgsdaniyar@gmail.com
+    ports:
+      - "8081:8081"
+    networks:
+      - tripmate-network
+    depends_on:
+      - postgres-app
+      - keycloak
+      - eureka-server
 
 volumes:
   keycloak_db:
