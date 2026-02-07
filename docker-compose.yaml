@@ -62,7 +62,10 @@ services:
       - tripmate-network
 
   eureka-server:
-    build: ./eureka-server
+    build:
+      context: .
+      dockerfile: eureka-server/Dockerfile
+
     container_name: eureka-server
     ports:
       - "8761:8761"
@@ -70,7 +73,10 @@ services:
       - tripmate-network
 
   apigw:
-    build: ./apigw
+    build:
+      context: .
+      dockerfile: apigw/Dockerfile
+
     container_name: apigw
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -85,14 +91,17 @@ services:
       - eureka-server
 
   user-service:
-    build: ./user-service
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+
     container_name: user-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-app:5432/appdb
       SPRING_DATASOURCE_USERNAME: app
       SPRING_DATASOURCE_PASSWORD: app
-      GOOGLE_CLIENT_ID: 763666130045-0f93cgjran1egi6or2iepgi95poc013s.apps.googleusercontent.com
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       KEYCLOAK_REALM: tripmate
       KEYCLOAK_CLIENT_ID: user-service
       KEYCLOAK_CLIENT_SECRET: user-service-secret
@@ -106,12 +115,15 @@ services:
       - keycloak
       - eureka-server
   notification:
-    build: ./notification
+    build:
+      context: .
+      dockerfile: notification/Dockerfile
+
     container_name: notification
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      MAIL_PASSWORD: nfxtowfvetpogksi
-      MAIL_USERNAME: zhlgsdaniyar@gmail.com
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
     ports:
       - "8081:8081"
     networks:

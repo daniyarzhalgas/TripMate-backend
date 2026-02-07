@@ -1,9 +1,15 @@
-FROM eclipse-temurin:21-jre
+# ---------- BUILD ----------
+FROM maven:3.9.6-eclipse-temurin-21 AS builder
+WORKDIR /build
 
+COPY . .
+RUN mvn -pl user-service -am clean package -DskipTests
+
+# ---------- RUNTIME ----------
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-ARG JAR_FILE=target/*.jar
-COPY ${JAR_FILE} app.jar
+COPY --from=builder /build/user-service/target/*.jar app.jar
 
 EXPOSE 8082
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+ENTRYPOINT ["java","-jar","app.jar"]
