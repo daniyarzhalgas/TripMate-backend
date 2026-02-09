@@ -70,6 +70,8 @@ services:
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
+    networks:
+      - tripmate-network
     volumes:
       - minio_data:/data
 
@@ -88,7 +90,8 @@ services:
       mc anonymous set download local/tripmate || true;
       echo 'Bucket tripmate is ready';
       "
-
+    networks:
+      - tripmate-network
 
   eureka-server:
     build:
