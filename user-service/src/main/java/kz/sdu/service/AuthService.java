@@ -5,9 +5,7 @@ import kz.sdu.clients.notification.NotificationEmailDto;
 import kz.sdu.clients.notification.PasswordResetLinkPayload;
 import kz.sdu.clients.notification.VerificationCodePayload;
 import kz.sdu.dto.*;
-import kz.sdu.entity.EmailVerificationCode;
-import kz.sdu.entity.PasswordResetToken;
-import kz.sdu.entity.UserProfile;
+import kz.sdu.entity.*;
 import kz.sdu.keycloak.KeycloakAdminFactory;
 import kz.sdu.keycloak.OidcTokenClient;
 import kz.sdu.repository.UserProfileRepository;
@@ -19,6 +17,7 @@ import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
@@ -54,7 +53,7 @@ public class AuthService {
             UserRepresentation user = findKeycloakUserByEmail(req.getEmail());
             ensureUserProfileIfMissing(user);
 
-            UserProfile profile = userProfileRepository.findByEmail(req.getEmail()).orElse(null);
+            UserEntity profile = userProfileRepository.findByEmail(req.getEmail()).orElse(null);
             UserLoginResponseDto loginResponseDto = UserLoginResponseDto.builder()
                     .success(true)
                     .data(UserLoginResponseDataDto.builder()
@@ -131,6 +130,10 @@ public class AuthService {
         UserRepresentation user = findKeycloakUserByEmail(req.getEmail());
         enableAndVerifyEmail(user.getId());
         verificationService.deleteVerificationCode(req.getEmail());
+        userProfileRepository.findByEmail(req.getEmail()).ifPresent(profile -> {
+            profile.setEmailVerified(true);
+            userProfileRepository.save(profile);
+        });
         notificationClient.sendWelcomeMessage(NotificationEmailDto.builder()
                 .email(req.getEmail())
                 .build());
@@ -280,7 +283,7 @@ public class AuthService {
                     throw new RuntimeException("User exists but Keycloak token exchange is not configured");
                 }
                 ensureUserProfileIfMissing(user);
-                UserProfile profile = userProfileRepository.findByEmail(googleUser.getEmail()).orElse(null);
+                UserEntity profile = userProfileRepository.findByEmail(googleUser.getEmail()).orElse(null);
                 return UserLoginResponseDto.builder()
                         .success(true)
                         .data(UserLoginResponseDataDto.builder()
@@ -293,7 +296,7 @@ public class AuthService {
 
             UserRepresentation user = findKeycloakUserByEmail(googleUser.getEmail());
             ensureUserProfileIfMissing(user);
-            UserProfile profile = userProfileRepository.findByEmail(googleUser.getEmail()).orElse(null);
+            UserEntity profile = userProfileRepository.findByEmail(googleUser.getEmail()).orElse(null);
 
             return UserLoginResponseDto.builder()
                     .success(true)
@@ -367,8 +370,8 @@ public class AuthService {
         u.setUsername(req.getEmail());
         u.setEnabled(false);
         u.setEmailVerified(false);
-        u.setFirstName(req.getFirstname());
-        u.setLastName(req.getLastname());
+        u.setFirstName(req.getFirstName());
+        u.setLastName(req.getLastName());
 
         CredentialRepresentation cred = new CredentialRepresentation();
         cred.setType(CredentialRepresentation.PASSWORD);
@@ -411,38 +414,41 @@ public class AuthService {
             return;
         }
         if (userProfileRepository.existsById(id)) return;
-        userProfileRepository.save(UserProfile.builder()
+        userProfileRepository.save(UserEntity.builder()
                 .id(id)
                 .email(user.getEmail())
-                .firstname(user.getFirstName())
-                .lastname(user.getLastName())
-                .dateOfBirth(null)
-                .gender(null)
-                .profileComplete(false)
+                .firstName(user.getFirstName() != null ? user.getFirstName() : "")
+                .lastName(user.getLastName() != null ? user.getLastName() : "")
+                .dateOfBirth(LocalDate.of(2000, 1, 1))
+                .active(true)
                 .build());
     }
 
     private void ensureUserProfileById(UUID id, UserRegistrationDto req) {
         if (userProfileRepository.existsById(id)) return;
-        LocalDate dob = parseDate(req.getDateOfBirth());
-        userProfileRepository.save(UserProfile.builder()
+        LocalDate dob = req.getDateOfBirth() != null ? req.getDateOfBirth() : null;
+        UserEntity.UserEntityBuilder b = UserEntity.builder()
                 .id(id)
                 .email(req.getEmail())
-                .firstname(req.getFirstname())
-                .lastname(req.getLastname())
+                .firstName(req.getFirstName())
+                .lastName(req.getLastName())
                 .dateOfBirth(dob)
-                .gender(req.getGender())
-                .profileComplete(false)
-                .build());
+                .gender(parseGender(req.getGender()))
+                .authProvider(AuthProvider.LOCAL)
+                .active(true);
+        if (req.getCity() != null) b.city(req.getCity());
+        if (req.getCountry() != null) b.country(req.getCountry());
+        if (req.getBio() != null) b.bio(req.getBio());
+        userProfileRepository.save(b.build());
     }
 
-    private AuthUserDto toAuthUser(UserRepresentation user, UserProfile profile, boolean isNewUser) {
+    private AuthUserDto toAuthUser(UserRepresentation user, UserEntity profile, boolean isNewUser) {
         UUID id = null;
         try {
             id = user.getId() != null ? UUID.fromString(user.getId()) : null;
         } catch (Exception ignored) {
         }
-        String name = profile != null && profile.getFirstname() != null ? profile.getFirstname() : user.getFirstName();
+        String name = profile != null && profile.getFirstName() != null ? profile.getFirstName() : user.getFirstName();
         boolean profileComplete = profile != null && profile.isProfileComplete();
         return AuthUserDto.builder()
                 .id(id)
@@ -462,6 +468,15 @@ public class AuthService {
         try {
             return LocalDate.parse(yyyyMmDd);
         } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Gender parseGender(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Gender.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException e) {
             return null;
         }
     }
