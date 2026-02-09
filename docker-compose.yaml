@@ -70,12 +70,30 @@ services:
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc
+    container_name: minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minio minio123; do
+        echo 'Waiting for MinIO...';
+        sleep 2;
+      done;
+      mc mb local/tripmate || true;
+      mc anonymous set download local/tripmate || true;
+      echo 'Bucket tripmate is ready';
+      "
+
 
   eureka-server:
     build:
       context: .
       dockerfile: eureka-server/Dockerfile
-
     container_name: eureka-server
     ports:
       - "8761:8761"
@@ -146,3 +164,4 @@ services:
 volumes:
   keycloak_db:
   app_db:
+  minio_data:

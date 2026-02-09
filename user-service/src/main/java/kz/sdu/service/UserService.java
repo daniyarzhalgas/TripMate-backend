@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -102,6 +103,7 @@ public class UserService {
                 .orElseGet(() -> {
                     UserPreferences p = UserPreferences.builder()
                             .user(user)
+                            .updatedAt(LocalDateTime.now())
                             .build();
                     return userPreferencesRepository.save(p);
                 });

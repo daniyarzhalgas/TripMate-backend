@@ -26,6 +26,12 @@ tripmate:
     baseUrl: http://keycloak:8080
     admin-username: admin
     admin-password: admin
+  minio:
+    endpoint: http://minio:9000
+    access-key: minio
+    secret-key: minio123
+    bucket: tripmate
+    public-base-url: ${MINIO_PUBLIC_URL:http://minio:9000}
 
 
 spring.security.oauth2.resourceserver.jwt:
