@@ -52,7 +52,7 @@ springdoc:
   swagger-ui:
     csrf:
       enabled: false
-    url: /swagger-ui.html
+#    url: /swagger-ui.html
 
 
 google:
