@@ -80,6 +80,7 @@ public class TripController {
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+    
 
     @Operation(summary = "Заявка по ID", description = "3.3 Получить заявку на поездку по её ID.")
     @ApiResponses({
