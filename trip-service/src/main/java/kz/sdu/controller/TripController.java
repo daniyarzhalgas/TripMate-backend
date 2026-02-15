@@ -1,5 +1,10 @@
 package kz.sdu.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import kz.sdu.dto.ApiResponse;
 import kz.sdu.dto.request.CreateTripRequestRequest;
 import kz.sdu.dto.request.UpdateTripRequestRequest;
@@ -22,6 +27,7 @@ import jakarta.validation.Valid;
 
 import java.util.UUID;
 
+@Tag(name = "Trip Requests", description = "Заявки на поездки (создание, просмотр, обновление, удаление)")
 @RestController
 @RequestMapping("/api/trip-requests")
 @RequiredArgsConstructor
@@ -29,15 +35,18 @@ public class TripController {
 
     private final TripRequestService tripRequestService;
 
-    /**
-     * 3.1 Create Trip Request
-     */
-
+    @Operation(summary = "Тестовый эндпоинт", description = "Проверка доступности сервиса")
+    @ApiResponse(responseCode = "200", description = "OK")
     @GetMapping("/test")
     public String test() {
         return "hello world";
     }
 
+    @Operation(summary = "Создать заявку на поездку", description = "3.1 Создание новой заявки на поездку. Требуется аутентификация.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Заявка создана"),
+            @ApiResponse(responseCode = "401", description = "Не авторизован")
+    })
     @PostMapping
     public ResponseEntity<ApiResponse<TripRequestResponse>> createTripRequest(
             Authentication authentication,
@@ -51,15 +60,14 @@ public class TripController {
                 .body(ApiResponse.success(response));
     }
 
-    /**
-     * 3.2 Get My Trip Requests
-     */
+    @Operation(summary = "Мои заявки на поездки", description = "3.2 Список заявок текущего пользователя с пагинацией и фильтром по статусу.")
+    @ApiResponse(responseCode = "200", description = "Страница заявок")
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<TripRequestPageResponse>> getMyTripRequests(
             Authentication authentication,
-            @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int limit
+            @Parameter(description = "Фильтр по статусу") @RequestParam(required = false) String status,
+            @Parameter(description = "Номер страницы (с 1)") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "Размер страницы") @RequestParam(defaultValue = "10") int limit
     ) {
         UUID userId = userIdFrom(authentication);
         Pageable pageable = PageRequest.of(page - 1, limit);
@@ -73,13 +81,15 @@ public class TripController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    /**
-     * 3.3 Get Trip Request by ID
-     */
+    @Operation(summary = "Заявка по ID", description = "3.3 Получить заявку на поездку по её ID.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Заявка найдена"),
+            @ApiResponse(responseCode = "404", description = "Заявка не найдена")
+    })
     @GetMapping("/{requestId}")
     public ResponseEntity<ApiResponse<TripRequestResponse>> getById(
             Authentication authentication,
-            @PathVariable UUID requestId
+            @Parameter(description = "UUID заявки") @PathVariable UUID requestId
     ) {
         UUID userId = userIdFrom(authentication);
         TripRequestResponse response =
@@ -88,13 +98,16 @@ public class TripController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    /**
-     * 3.4 Update Trip Request
-     */
+    @Operation(summary = "Обновить заявку", description = "3.4 Обновление заявки на поездку (даты, бюджет и т.д.).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Заявка обновлена"),
+            @ApiResponse(responseCode = "403", description = "Нет прав на изменение"),
+            @ApiResponse(responseCode = "404", description = "Заявка не найдена")
+    })
     @PutMapping("/{requestId}")
     public ResponseEntity<ApiResponse<TripRequestUpdateResponse>> update(
             Authentication authentication,
-            @PathVariable UUID requestId,
+            @Parameter(description = "UUID заявки") @PathVariable UUID requestId,
             @RequestBody UpdateTripRequestRequest request
     ) {
         UUID userId = userIdFrom(authentication);
@@ -104,13 +117,16 @@ public class TripController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    /**
-     * 3.5 Delete Trip Request
-     */
+    @Operation(summary = "Удалить заявку", description = "3.5 Удаление заявки на поездку. Доступно только владельцу.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Заявка удалена"),
+            @ApiResponse(responseCode = "403", description = "Нет прав"),
+            @ApiResponse(responseCode = "404", description = "Заявка не найдена")
+    })
     @DeleteMapping("/{requestId}")
     public ResponseEntity<ApiResponse<Void>> delete(
             Authentication authentication,
-            @PathVariable UUID requestId
+            @Parameter(description = "UUID заявки") @PathVariable UUID requestId
     ) {
         UUID userId = userIdFrom(authentication);
         tripRequestService.delete(userId, requestId);
