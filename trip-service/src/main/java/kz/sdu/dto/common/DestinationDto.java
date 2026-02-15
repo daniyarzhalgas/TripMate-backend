@@ -1,10 +1,11 @@
 package kz.sdu.dto.common;
 
-import lombok.Builder;
-import lombok.Data;
+import lombok.*;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class DestinationDto {
 
     private String city;

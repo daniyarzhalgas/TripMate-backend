@@ -9,7 +9,7 @@ RUN mvn -pl trip-service -am clean package -DskipTests
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-COPY --from=builder /build/apigw/target/*.jar app.jar
+COPY --from=builder /build/trip-service/target/*.jar app.jar
 
 EXPOSE 8085
 ENTRYPOINT ["java","-jar","app.jar"]

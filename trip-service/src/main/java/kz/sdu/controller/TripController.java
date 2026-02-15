@@ -72,6 +72,7 @@ public class TripController {
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+    
 
     /**
      * 3.3 Get Trip Request by ID
