@@ -65,9 +65,9 @@ public class TripController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponseDto<TripRequestPageResponse>> getMyTripRequests(
             Authentication authentication,
-            @Parameter(description = "Фильтр по статусу") @RequestParam(required = false) String status,
-            @Parameter(description = "Номер страницы (с 1)") @RequestParam(defaultValue = "1") int page,
-            @Parameter(description = "Размер страницы") @RequestParam(defaultValue = "10") int limit
+            @Parameter(description = "Фильтр по статусу") @RequestParam(value = "status", required = false) String status,
+            @Parameter(description = "Номер страницы (с 1)") @RequestParam(value = "page", defaultValue = "1") int page,
+            @Parameter(description = "Размер страницы") @RequestParam(value = "limit", defaultValue = "10") int limit
     ) {
         UUID userId = userIdFrom(authentication);
         Pageable pageable = PageRequest.of(page - 1, limit);
@@ -80,7 +80,7 @@ public class TripController {
 
         return ResponseEntity.ok(ApiResponseDto.success(response));
     }
-    
+
 
     @Operation(summary = "Заявка по ID", description = "3.3 Получить заявку на поездку по её ID.")
     @ApiResponses({
@@ -90,7 +90,7 @@ public class TripController {
     @GetMapping("/{requestId}")
     public ResponseEntity<ApiResponseDto<TripRequestResponse>> getById(
             Authentication authentication,
-            @Parameter(description = "UUID заявки") @PathVariable UUID requestId
+            @Parameter(description = "UUID заявки") @PathVariable("requestId") UUID requestId
     ) {
         UUID userId = userIdFrom(authentication);
         TripRequestResponse response =
@@ -108,7 +108,7 @@ public class TripController {
     @PutMapping("/{requestId}")
     public ResponseEntity<ApiResponseDto<TripRequestUpdateResponse>> update(
             Authentication authentication,
-            @Parameter(description = "UUID заявки") @PathVariable UUID requestId,
+            @Parameter(description = "UUID заявки") @PathVariable("requestId") UUID requestId,
             @RequestBody UpdateTripRequestRequest request
     ) {
         UUID userId = userIdFrom(authentication);
@@ -127,7 +127,7 @@ public class TripController {
     @DeleteMapping("/{requestId}")
     public ResponseEntity<ApiResponseDto<Void>> delete(
             Authentication authentication,
-            @Parameter(description = "UUID заявки") @PathVariable UUID requestId
+            @Parameter(description = "UUID заявки") @PathVariable("requestId") UUID requestId
     ) {
         UUID userId = userIdFrom(authentication);
         tripRequestService.delete(userId, requestId);

@@ -71,7 +71,7 @@ public class UserController {
     @GetMapping("/{userId}")
     public ResponseEntity<UserPublicProfileResponseDto> getUserById(
             @AuthenticationPrincipal Jwt jwt,
-            @Parameter(description = "UUID пользователя") @PathVariable UUID userId) {
+            @Parameter(description = "UUID пользователя") @PathVariable("userId") UUID userId) {
         return ResponseEntity.ok(userService.getUserById(userId.toString()));
     }
 
