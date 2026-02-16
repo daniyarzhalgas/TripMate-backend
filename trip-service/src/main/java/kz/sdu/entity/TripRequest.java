@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import kz.sdu.entity.User;
 
 @Entity
 @Table(name = "trip_requests")
@@ -29,6 +30,11 @@ public class TripRequest {
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
+
+    // Связь для JOIN запросов (только для фильтрации, не для сохранения)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    private User user;
 
     @Column(name = "dest_city", nullable = false, length = 100)
     private String destCity;
