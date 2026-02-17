@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 
-import java.util.List;
 import java.util.UUID;
 
 @Tag(name = "Trip Requests", description = "Заявки на поездки (создание, просмотр, обновление, удаление)")
@@ -61,68 +60,9 @@ public class TripController {
                 .body(ApiResponseDto.success(response));
     }
 
-
-    @Operation(summary = "Получить все заявки на поездки", description = "Получить список всех заявок с возможностью фильтрации")
-    @ApiResponse(responseCode = "200", description = "Список заявок")
-    @GetMapping
-    public ResponseEntity<ApiResponseDto<List<TripRequestResponse>>> getAllTripRequests(
-            @Parameter(description = "Фильтр по полу (male, female, other)") 
-            @RequestParam(value = "gender", required = false) String gender,
-            @Parameter(description = "Минимальный возраст") 
-            @RequestParam(value = "min_age", required = false) Integer minAge,
-            @Parameter(description = "Максимальный возраст") 
-            @RequestParam(value = "max_age", required = false) Integer maxAge,
-            @Parameter(description = "Минимальный бюджет") 
-            @RequestParam(value = "min_budget", required = false) java.math.BigDecimal minBudget,
-            @Parameter(description = "Город назначения") 
-            @RequestParam(value = "city", required = false) String city,
-            @Parameter(description = "Страна назначения") 
-            @RequestParam(value = "country", required = false) String country,
-            @Parameter(description = "Дата начала поездки (формат: dd.MM.yyyy)") 
-            @RequestParam(value = "startDate", required = false) String startDateStr,
-            @Parameter(description = "Дата окончания поездки (формат: dd.MM.yyyy)") 
-            @RequestParam(value = "endDate", required = false) String endDateStr
-    ) {
-        java.time.LocalDate startDate = null;
-        java.time.LocalDate endDate = null;
-        
-        // Парсинг дат из формата dd.MM.yyyy
-        if (startDateStr != null && !startDateStr.isBlank()) {
-            try {
-                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
-                startDate = java.time.LocalDate.parse(startDateStr, formatter);
-            } catch (Exception e) {
-                // Игнорируем ошибку парсинга, дата останется null
-            }
-        }
-        
-        if (endDateStr != null && !endDateStr.isBlank()) {
-            try {
-                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
-                endDate = java.time.LocalDate.parse(endDateStr, formatter);
-            } catch (Exception e) {
-                // Игнорируем ошибку парсинга, дата останется null
-            }
-        }
-        
-        List<TripRequestResponse> result;
-        if (gender != null || minAge != null || maxAge != null || minBudget != null 
-                || city != null || country != null || startDate != null || endDate != null) {
-            result = tripRequestService.getAllTripRequestWithFilters(
-                    gender, minAge, maxAge, minBudget, city, country, startDate, endDate
-            );
-        } else {
-            result = tripRequestService.getAllTripRequest();
-        }
-        
-        return ResponseEntity.ok(ApiResponseDto.success(result));
-    }
-
-
     @Operation(summary = "Мои заявки на поездки", description = "3.2 Список заявок текущего пользователя с пагинацией и фильтром по статусу.")
     @ApiResponse(responseCode = "200", description = "Страница заявок")
     @GetMapping("/me")
-
     public ResponseEntity<ApiResponseDto<TripRequestPageResponse>> getMyTripRequests(
             Authentication authentication,
             @Parameter(description = "Фильтр по статусу") @RequestParam(value = "status", required = false) String status,

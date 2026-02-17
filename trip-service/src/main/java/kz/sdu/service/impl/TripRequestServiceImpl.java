@@ -2,7 +2,6 @@ package kz.sdu.service.impl;
 
 import kz.sdu.dto.common.BudgetDto;
 import kz.sdu.dto.common.DestinationDto;
-import kz.sdu.dto.common.PreferencesDto;
 import kz.sdu.dto.request.CreateTripRequestRequest;
 import kz.sdu.dto.request.UpdateTripRequestRequest;
 import kz.sdu.dto.response.TripRequestResponse;
@@ -12,20 +11,14 @@ import kz.sdu.entity.TripRequest;
 import kz.sdu.exception.ForbiddenException;
 import kz.sdu.exception.NotFoundException;
 import kz.sdu.repository.TripRequestRepository;
-import kz.sdu.repository.specification.TripRequestSpecification;
 import kz.sdu.service.TripRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -72,54 +65,6 @@ public class TripRequestServiceImpl implements TripRequestService {
         return repository
                 .findByUserId(userId, pageable)
                 .map(this::mapToShortResponse);
-    }
-
-    @Override
-    public List<TripRequestResponse> getAllTripRequest() {
-        return repository.findAll().stream().map(this::mapToTripRequest).toList();
-    }
-
-    @Override
-    public List<TripRequestResponse> getAllTripRequestWithFilters(
-            String gender,
-            Integer minAge,
-            Integer maxAge,
-            BigDecimal minBudget,
-            String city,
-            String country,
-            LocalDate startDate,
-            LocalDate endDate
-    ) {
-        Specification<TripRequest> spec = TripRequestSpecification.withFilters(
-                gender, minAge, maxAge, minBudget, city, country, startDate, endDate
-        );
-        return repository.findAll(spec).stream().map(this::mapToTripRequest).toList();
-    }
-
-    private TripRequestResponse mapToTripRequest(TripRequest tripRequest) {
-        return TripRequestResponse.builder()
-                .id(tripRequest.getId())
-                .userId(tripRequest.getUserId())
-                .destination(DestinationDto.builder()
-                        .city(tripRequest.getDestCity())
-                        .country(tripRequest.getDestCountry())
-                        .countryCode(tripRequest.getDestCountryCode())
-                        .build())
-                .startDate(tripRequest.getStartDate())
-                .endDate(tripRequest.getEndDate())
-                .flexibleDates(tripRequest.getFlexibleDates())
-                .budget(BudgetDto.builder()
-                        .amount(tripRequest.getBudgetAmount()).currency(tripRequest.getBudgetCurrency()).build())
-                .preferences(Optional.ofNullable(tripRequest.getPreferences())
-                        .map(p -> PreferencesDto.builder()
-                                .mustHave(p.getMustHave())
-                                .niceToHave(p.getNiceToHave())
-                                .build())
-                        .orElse(null))
-                .status(tripRequest.getStatus())
-                .matchCount(tripRequest.getMatchCount())
-                .notifyOnMatch(tripRequest.getNotifyOnMatch())
-                .createdAt(tripRequest.getCreatedAt()).build();
     }
 
     @Override
@@ -232,7 +177,7 @@ public class TripRequestServiceImpl implements TripRequestService {
                 .status(entity.getStatus())
                 .matchCount(entity.getMatchCount())
                 .notifyOnMatch(entity.getNotifyOnMatch())
-                .createdAt(entity.getCreatedAt())
+                .createdAt(entity.getCreatedAt().atOffset(ZoneOffset.UTC))
                 .build();
     }
 
