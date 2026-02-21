@@ -2,14 +2,18 @@ package kz.sdu.service.impl;
 
 import kz.sdu.dto.common.BudgetDto;
 import kz.sdu.dto.common.DestinationDto;
+import kz.sdu.dto.request.AddParticipantRequest;
 import kz.sdu.dto.request.CreateTripRequestRequest;
 import kz.sdu.dto.request.UpdateTripRequestRequest;
+import kz.sdu.dto.response.ParticipantResponse;
 import kz.sdu.dto.response.TripRequestResponse;
 import kz.sdu.dto.response.TripRequestShortResponse;
 import kz.sdu.dto.response.TripRequestUpdateResponse;
 import kz.sdu.entity.TripRequest;
+import kz.sdu.entity.TripRequestParticipant;
 import kz.sdu.exception.ForbiddenException;
 import kz.sdu.exception.NotFoundException;
+import kz.sdu.repository.TripRequestParticipantRepository;
 import kz.sdu.repository.TripRequestRepository;
 import kz.sdu.service.TripRequestService;
 import lombok.RequiredArgsConstructor;
@@ -19,13 +23,16 @@ import org.springframework.stereotype.Service;
 
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class TripRequestServiceImpl implements TripRequestService {
 
     private final TripRequestRepository repository;
+    private final TripRequestParticipantRepository participantRepository;
 
     @Override
     public TripRequestResponse create(UUID userId, CreateTripRequestRequest request) {
@@ -129,6 +136,73 @@ public class TripRequestServiceImpl implements TripRequestService {
         }
 
         repository.delete(entity);
+    }
+
+    @Override
+    public ParticipantResponse addParticipant(UUID ownerUserId, UUID requestId, AddParticipantRequest request) {
+        TripRequest tripRequest = repository.findById(requestId)
+                .orElseThrow(() -> new NotFoundException("Trip request not found"));
+
+        if (!tripRequest.getUserId().equals(ownerUserId)) {
+            throw new ForbiddenException("Only the owner can add participants");
+        }
+
+        UUID userToAdd = request.getUserId();
+        if (tripRequest.getUserId().equals(userToAdd)) {
+            throw new IllegalArgumentException("Cannot add the owner as participant");
+        }
+
+        if (participantRepository.existsByTripRequestIdAndUserId(requestId, userToAdd)) {
+            throw new IllegalArgumentException("User is already a participant");
+        }
+
+        TripRequestParticipant participant = TripRequestParticipant.builder()
+                .tripRequestId(requestId)
+                .userId(userToAdd)
+                .build();
+        participant = participantRepository.save(participant);
+
+        return ParticipantResponse.builder()
+                .id(participant.getId())
+                .userId(participant.getUserId())
+                .addedAt(participant.getAddedAt().atOffset(ZoneOffset.UTC))
+                .build();
+    }
+
+    @Override
+    public void removeParticipant(UUID ownerUserId, UUID requestId, UUID participantUserId) {
+        TripRequest tripRequest = repository.findById(requestId)
+                .orElseThrow(() -> new NotFoundException("Trip request not found"));
+
+        if (!tripRequest.getUserId().equals(ownerUserId)) {
+            throw new ForbiddenException("Only the owner can remove participants");
+        }
+
+        if (!participantRepository.existsByTripRequestIdAndUserId(requestId, participantUserId)) {
+            throw new NotFoundException("Participant not found");
+        }
+
+        participantRepository.deleteByTripRequestIdAndUserId(requestId, participantUserId);
+    }
+
+    @Override
+    public List<ParticipantResponse> getParticipants(UUID userId, UUID requestId) {
+        TripRequest tripRequest = repository.findById(requestId)
+                .orElseThrow(() -> new NotFoundException("Trip request not found"));
+
+        boolean isOwner = tripRequest.getUserId().equals(userId);
+        boolean isParticipant = participantRepository.existsByTripRequestIdAndUserId(requestId, userId);
+        if (!isOwner && !isParticipant) {
+            throw new ForbiddenException("Access denied to participants list");
+        }
+
+        return participantRepository.findByTripRequestIdOrderByAddedAtAsc(requestId).stream()
+                .map(p -> ParticipantResponse.builder()
+                        .id(p.getId())
+                        .userId(p.getUserId())
+                        .addedAt(p.getAddedAt().atOffset(ZoneOffset.UTC))
+                        .build())
+                .collect(Collectors.toList());
     }
 
     // -----------------------

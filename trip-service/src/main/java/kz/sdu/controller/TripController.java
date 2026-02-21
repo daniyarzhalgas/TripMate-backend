@@ -6,8 +6,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import kz.sdu.dto.ApiResponseDto;
+import kz.sdu.dto.request.AddParticipantRequest;
 import kz.sdu.dto.request.CreateTripRequestRequest;
 import kz.sdu.dto.request.UpdateTripRequestRequest;
+import kz.sdu.dto.response.ParticipantResponse;
 import kz.sdu.dto.response.TripRequestPageResponse;
 import kz.sdu.dto.response.TripRequestResponse;
 import kz.sdu.dto.response.TripRequestShortResponse;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 
+import java.util.List;
 import java.util.UUID;
 
 @Tag(name = "Trip Requests", description = "Заявки на поездки (создание, просмотр, обновление, удаление)")
@@ -135,6 +138,57 @@ public class TripController {
         return ResponseEntity.ok(
                 ApiResponseDto.successMessage("Trip request deleted successfully")
         );
+    }
+
+    @Operation(summary = "Добавить участника", description = "Владелец заявки добавляет пользователя в участники заявки на поездку.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Участник добавлен"),
+            @ApiResponse(responseCode = "400", description = "Некорректный запрос (уже участник, попытка добавить владельца)"),
+            @ApiResponse(responseCode = "403", description = "Только владелец может добавлять участников"),
+            @ApiResponse(responseCode = "404", description = "Заявка не найдена")
+    })
+    @PostMapping("/{requestId}/participants")
+    public ResponseEntity<ApiResponseDto<ParticipantResponse>> addParticipant(
+            Authentication authentication,
+            @Parameter(description = "UUID заявки") @PathVariable("requestId") UUID requestId,
+            @Valid @RequestBody AddParticipantRequest request
+    ) {
+        UUID userId = userIdFrom(authentication);
+        ParticipantResponse response = tripRequestService.addParticipant(userId, requestId, request);
+        return ResponseEntity.ok(ApiResponseDto.success(response));
+    }
+
+    @Operation(summary = "Удалить участника", description = "Владелец заявки удаляет пользователя из участников.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Участник удалён"),
+            @ApiResponse(responseCode = "403", description = "Только владелец может удалять участников"),
+            @ApiResponse(responseCode = "404", description = "Заявка или участник не найдены")
+    })
+    @DeleteMapping("/{requestId}/participants/{userId}")
+    public ResponseEntity<ApiResponseDto<Void>> removeParticipant(
+            Authentication authentication,
+            @Parameter(description = "UUID заявки") @PathVariable("requestId") UUID requestId,
+            @Parameter(description = "UUID удаляемого участника") @PathVariable("userId") UUID participantUserId
+    ) {
+        UUID ownerUserId = userIdFrom(authentication);
+        tripRequestService.removeParticipant(ownerUserId, requestId, participantUserId);
+        return ResponseEntity.ok(ApiResponseDto.successMessage("Participant removed"));
+    }
+
+    @Operation(summary = "Список участников", description = "Список участников заявки. Доступен владельцу заявки и самим участникам.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список участников"),
+            @ApiResponse(responseCode = "403", description = "Нет доступа"),
+            @ApiResponse(responseCode = "404", description = "Заявка не найдена")
+    })
+    @GetMapping("/{requestId}/participants")
+    public ResponseEntity<ApiResponseDto<List<ParticipantResponse>>> getParticipants(
+            Authentication authentication,
+            @Parameter(description = "UUID заявки") @PathVariable("requestId") UUID requestId
+    ) {
+        UUID userId = userIdFrom(authentication);
+        List<ParticipantResponse> list = tripRequestService.getParticipants(userId, requestId);
+        return ResponseEntity.ok(ApiResponseDto.success(list));
     }
 
     private static UUID userIdFrom(Authentication authentication) {
